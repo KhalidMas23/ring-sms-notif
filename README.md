@@ -1,23 +1,27 @@
-# Ring to SMS Notifier with Video Recording
+# Ring to Pushover Notifier with Video Recording
 
-Monitor your Ring doorbell and cameras, receive SMS notifications, and automatically download videos to a Raspberry Pi.
+Monitor your Ring doorbell and cameras, receive instant push notifications with snapshots via Pushover, and automatically download videos to a Raspberry Pi.
+
+Perfect for indoor room monitoring during travel when you can't use the Ring app.
 
 ## Features
 
-- 📱 **SMS Notifications**: Instant alerts for doorbell presses and motion detection via Twilio
+- 📱 **Push Notifications**: Instant alerts via Pushover (no SMS fees, works on WiFi internationally)
+- 📸 **Snapshots**: Includes image with each notification so you see what triggered the alert
 - 📹 **Video Recording**: Automatically downloads Ring videos to local storage
 - 🌐 **Web Viewer**: Browse and watch recorded videos from any device on your network
 - 🔄 **Auto-cleanup**: Manages storage by deleting oldest videos when full
 - 🚀 **Auto-start**: Runs on boot with systemd service
-- 💾 **Smart Caching**: Remembers Ring authentication to avoid constant 2FA
+- 💾 **Smart Caching**: Remembers Ring authentication (no constant 2FA)
+- 🎯 **Indoor Monitoring**: Perfect for monitoring rooms while traveling
 
 ## Use Cases
 
-- Traveling without app access
+- Traveling internationally without Ring app access
+- Indoor room monitoring (bedroom, nursery, etc.)
 - Independent backup of Ring footage (no subscription needed)
 - Privacy-focused local storage
 - Areas with unreliable internet for Ring cloud
-- Long-term archival of security footage
 
 ## Requirements
 
@@ -29,7 +33,7 @@ Monitor your Ring doorbell and cameras, receive SMS notifications, and automatic
 
 ### Accounts
 - Ring account
-- Twilio account (free trial includes $15 credit)
+- Pushover account ($5 one-time for app - unlimited notifications forever)
 
 ## Quick Start
 
@@ -41,64 +45,102 @@ cd ring-notifier
 
 ### 2. Install dependencies
 ```bash
-pip3 install ring-doorbell python-dotenv twilio flask requests --break-system-packages
+pip install -r requirements.txt
+
+# Or manually:
+pip install ring-doorbell python-dotenv requests opencv-python-headless
+
+# On Raspberry Pi, add --break-system-packages flag:
+pip3 install -r requirements.txt --break-system-packages
 ```
 
-### 3. Configure credentials
+### 3. Get Pushover Credentials
+
+1. Buy Pushover app ($5 one-time): https://pushover.net
+2. Log in to https://pushover.net
+3. Copy your **User Key** from dashboard
+4. Click **"Create an Application/API Token"**
+   - Name: "Ring Notifier"
+   - Click Create
+5. Copy the **API Token**
+
+### 4. Configure credentials
 ```bash
-cp .env.template .env
+cp .env.pushover.template .env
 nano .env
 ```
 
 Fill in your:
 - Ring email and password
-- Twilio credentials (Account SID, Auth Token, phone numbers)
+- Pushover User Key and API Token
 - Video storage settings
 
 **IMPORTANT**: Never commit your `.env` file! It's already in `.gitignore`.
 
-### 4. Run the notifier
+### 5. Run the notifier
 ```bash
-python3 ring_to_sms_with_video.py
+python ring_to_pushover.py
 ```
 
-You'll receive a test SMS and videos will be saved to `./ring_videos/`
+First run will ask for Ring 2FA code. After that, token is cached - no more 2FA needed!
 
-### 5. Set up auto-start (optional)
+You'll receive a test Pushover notification and videos will be saved to `./ring_videos/`
+
+### 6. Set up auto-start (optional)
 See [SETUP.md](SETUP.md) for full systemd service configuration.
 
 ## Files
 
-- `ring_to_sms_with_video.py` - Main script with video recording
-- `ring_to_sms.py` - Notification-only version (lighter)
+**Main Scripts:**
+- `ring_to_pushover.py` - Main script with Pushover notifications and video recording
 - `video_viewer.py` - Web interface for browsing videos
-- `.env.template` - Configuration template (copy to `.env`)
+- `ring_debug.py` - Debug script to see your Ring devices
+
+**Alternative Notification Methods:**
+- `ring_to_email.py` - Email notifications (if you prefer email)
+- `ring_to_whatsapp.py` - WhatsApp notifications via Twilio
+- `ring_to_sms.py` - SMS notifications via Twilio (deprecated - use Pushover instead)
+
+**Configuration:**
+- `.env.pushover.template` - Pushover configuration template
+- `requirements.txt` - Python dependencies
+
+**Documentation:**
 - `SETUP.md` - Detailed setup instructions
+- `PUSHOVER_SETUP.md` - Pushover setup guide
 - `VIDEO_GUIDE.md` - Advanced video storage and access guide
+- `GMAIL_SETUP.md` - Gmail setup (if using email notifications)
+- `WHATSAPP_SETUP.md` - WhatsApp setup (if using WhatsApp)
 
 ## Configuration
 
 Edit `.env` to customize:
 
 ```bash
-# Enable/disable video downloads
-DOWNLOAD_VIDEOS=true
+# Ring Account
+RING_USERNAME=your_ring_email@example.com
+RING_PASSWORD=your_ring_password
 
-# Where to store videos
-VIDEOS_DIR=./ring_videos
+# Pushover (get from pushover.net)
+PUSHOVER_USER_KEY=uxxxxxxxxxxxxxxxxxxxxx
+PUSHOVER_API_TOKEN=axxxxxxxxxxxxxxxxxxxxx
 
-# Max storage before auto-cleanup (in GB)
-MAX_STORAGE_GB=10
-
-# How often to check for events (in script)
-CHECK_INTERVAL=10  # seconds
+# Video Settings
+DOWNLOAD_VIDEOS=true              # Enable/disable video downloads
+VIDEOS_DIR=./ring_videos          # Where to store videos
+MAX_STORAGE_GB=10                 # Max storage before auto-cleanup
 ```
+
+You can also edit the script to adjust:
+- `CHECK_INTERVAL = 10` - How often to check for events (in seconds)
+- Notification priorities for different event types
+- Which events to record (doorbell, motion, etc.)
 
 ## Accessing Videos
 
 ### Web Viewer (Recommended)
 ```bash
-python3 video_viewer.py
+python video_viewer.py
 # Open http://[Pi-IP]:5000 in browser
 ```
 
@@ -126,41 +168,55 @@ ls -lh  # View all videos
 
 ## Costs
 
-- **Twilio free trial**: $15 credit (~500-1000 SMS)
-- **Twilio after trial**: ~$0.0075 per SMS
+- **Pushover**: $5 one-time (unlimited notifications forever)
 - **Raspberry Pi power**: ~$0.50/month electricity
-- **Total for 1 month**: ~$1-5 depending on activity
+- **Total for 1 month**: ~$0.50 (after initial $5 Pushover purchase)
+
+Compare to Twilio SMS: ~$1-5/month depending on activity
+
+## Why Pushover Over SMS?
+
+✅ **$5 one-time** vs ongoing SMS costs  
+✅ **No verification** - no business info needed  
+✅ **Works internationally** on WiFi  
+✅ **Rich notifications** - includes snapshots  
+✅ **Made for hobbyists** - not a B2B service  
+✅ **Instant delivery** - just as fast as SMS  
 
 ## Security Notes
 
 ⚠️ **Important Security Practices:**
 
 1. **Never commit `.env` file** - Contains sensitive credentials
-2. **Use strong Ring password** - Consider changing after deployment
-3. **Keep Pi behind firewall** - Don't expose SSH to internet without proper security
-4. **Physical security** - Keep Pi in secure location
-5. **For remote access** - Use VPN (Tailscale/WireGuard) instead of port forwarding
+2. **Token caching** - `ring_token.cache` is auto-generated and shouldn't be shared
+3. **Use strong Ring password** - Consider changing after deployment
+4. **Keep Pi behind firewall** - Don't expose SSH to internet without proper security
+5. **Physical security** - Keep Pi in secure location
+6. **For remote access** - Use VPN (Tailscale/WireGuard) instead of port forwarding
 
 ## Troubleshooting
 
 **Authentication fails:**
-- Approve the login on your Ring app (first time only)
-- Check Ring credentials in `.env`
-- Delete `ring_token.cache` and try again
+- First run requires Ring 2FA code
+- After successful auth, token is cached in `ring_token.cache`
+- Delete token file and re-run if authentication issues persist
 
 **Videos not downloading:**
 - Verify `DOWNLOAD_VIDEOS=true` in `.env`
 - Check storage space: `df -h`
-- Some events (live view) don't generate recordings
-- Ring may take 10-30 seconds to process video
+- Ring may take 10-30 seconds to process video after event
 
-**SMS not sending:**
-- Verify Twilio credentials
-- Check trial account credit
-- Ensure phone numbers include country code (+1 for US)
-- Trial accounts can only send to verified numbers
+**Snapshots not appearing:**
+- Install opencv: `pip install opencv-python-headless`
+- Script extracts first frame from video as fallback
+- Some Ring models may not support snapshot API
 
-See [SETUP.md](SETUP.md) for detailed troubleshooting.
+**Notifications not sending:**
+- Verify Pushover credentials in `.env`
+- Test by triggering motion detection manually
+- Check console output for error messages
+
+See [PUSHOVER_SETUP.md](PUSHOVER_SETUP.md) for detailed Pushover troubleshooting.
 
 ## Contributing
 
@@ -184,15 +240,16 @@ MIT License - See LICENSE file
 ## Acknowledgments
 
 - [ring-doorbell](https://github.com/tchellomello/python-ring-doorbell) - Unofficial Ring API library
-- [Twilio](https://www.twilio.com/) - SMS notifications
+- [Pushover](https://pushover.net/) - Push notification service
 - The Raspberry Pi community
 
 ## Support
 
 - Open an issue for bugs or questions
-- See [VIDEO_GUIDE.md](VIDEO_GUIDE.md) for advanced video features
-- Check [SETUP.md](SETUP.md) for detailed setup instructions
+- See [PUSHOVER_SETUP.md](PUSHOVER_SETUP.md) for Pushover setup help
+- Check [VIDEO_GUIDE.md](VIDEO_GUIDE.md) for advanced video features
+- See [SETUP.md](SETUP.md) for detailed setup instructions
 
 ---
 
-**Made for**: People who need Ring notifications without the app, want local video backups, or value privacy through local storage.
+**Made for**: People who need Ring notifications without the app, want local video backups for indoor monitoring, or value privacy through local storage during travel.
