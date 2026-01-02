@@ -33,6 +33,9 @@ class RingPushoverNotifier:
         self.ring = None
         self.last_event_ids = {}
         self.videos_path = Path(VIDEOS_DIR)
+        self.was_connected = True  # Track connection state
+        self.consecutive_errors = 0  # Track error count
+        self.connection_lost_time = None  # Track when connection was lost
         self.initialize()
     
     def initialize(self):
@@ -295,9 +298,47 @@ class RingPushoverNotifier:
             if 'stickup_cams' in devices:
                 for camera in devices['stickup_cams']:
                     self._check_device_events(camera)
+            
+            # Connection successful - check if we just recovered
+            if not self.was_connected and self.connection_lost_time:
+                recovery_time = datetime.now()
+                disconnect_duration = recovery_time - self.connection_lost_time
+                
+                # Format duration nicely
+                minutes = int(disconnect_duration.total_seconds() / 60)
+                seconds = int(disconnect_duration.total_seconds() % 60)
+                
+                if minutes > 0:
+                    duration_str = f"{minutes} minute{'s' if minutes != 1 else ''} and {seconds} second{'s' if seconds != 1 else ''}"
+                else:
+                    duration_str = f"{seconds} second{'s' if seconds != 1 else ''}"
+                
+                print(f"\n[{recovery_time}] Connection restored! (Was down for {duration_str})")
+                
+                self.send_pushover(
+                    "Ring Connection Restored",
+                    f"Connection restored at {recovery_time.strftime('%Y-%m-%d %H:%M:%S')}\n\n"
+                    f"Lost connection at: {self.connection_lost_time.strftime('%Y-%m-%d %H:%M:%S')}\n"
+                    f"Downtime: {duration_str}\n\n"
+                    f"Monitoring resumed. Any events during downtime were not recorded.",
+                    priority=1  # High priority for reconnection alerts
+                )
+                self.was_connected = True
+                self.connection_lost_time = None
+            
+            # Reset error counter on successful check
+            self.consecutive_errors = 0
                 
         except Exception as e:
-            print(f"[{datetime.now()}] Error checking events: {e}")
+            self.consecutive_errors += 1
+            
+            # Mark connection as lost after 3 consecutive errors (30 seconds)
+            if self.was_connected and self.consecutive_errors >= 3:
+                self.connection_lost_time = datetime.now()
+                print(f"\n[{self.connection_lost_time}] Connection lost! Will notify when restored.")
+                self.was_connected = False
+            
+            print(f"[{datetime.now()}] Error checking events ({self.consecutive_errors}): {e}")
     
     def _check_device_events(self, device):
         """Check a specific device for new events"""
@@ -329,7 +370,7 @@ class RingPushoverNotifier:
         # Format notification based on event type
         if kind == 'ding':
             title = f"Doorbell: {device.name}"
-            message = f"Ding Dong, someone's ringing\nTime: {created_at}"
+            message = f"Doorbell pressed\nTime: {created_at}"
             priority = 1  # High priority for doorbell
         elif kind == 'motion':
             title = f"Motion: {device.name}"
@@ -340,7 +381,7 @@ class RingPushoverNotifier:
             message = f"Live view started\nTime: {created_at}"
             priority = 0
         else:
-            title = f"🔔 Ring: {device.name}"
+            title = f"Ring: {device.name}"
             message = f"{kind} event\nTime: {created_at}"
             priority = 0
         
@@ -379,7 +420,7 @@ class RingPushoverNotifier:
             video_path = self.download_video(device, event)
             
             if video_path:
-                message += f"\n\n📼 Video saved locally"
+                message += f"\n\nVideo saved locally"
                 
                 # If no snapshot, try extracting frame from video
                 if not snapshot_path:
@@ -419,9 +460,9 @@ class RingPushoverNotifier:
         
         # Send test notification
         test_title = "Ring Notifier Started"
-        test_message = "Ring Pushover Notifier is now active and monitoring your devices"
+        test_message = "Ring Pushover Notifier is now active and monitoring your devices!"
         if DOWNLOAD_VIDEOS:
-            test_message += "\n\n📼 Video recording enabled"
+            test_message += "\n\nVideo recording enabled"
         
         self.send_pushover(test_title, test_message, priority=0)
         
